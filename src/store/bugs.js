@@ -1,49 +1,106 @@
 import { createSlice } from "@reduxjs/toolkit";
+import moment from "moment";
 import { createSelector } from "reselect";
+import { apiCallBegan } from "./api";
 // Reducer
-let lastId = 0;
-
 const slice = createSlice({
   name: "bugs",
-  initialState: [],
+  initialState: {
+    list: [],
+    loading: false,
+    lastFetch: null,
+  },
   reducers: {
-    // action => action handlers
+    bugsRequestFailed: (bugs) => {
+      bugs.loading = false;
+    },
+    bugsRequested: (bugs) => {
+      bugs.loading = true;
+    },
+    bugsReceived: (bugs, action) => {
+      bugs.list = action.payload;
+      bugs.loading = false;
+      bugs.lastFetch = Date.now();
+    },
     bugAssignedToUser: (bugs, action) => {
-      const { bugId, userId } = action.payload;
-      const index = bugs.findIndex((bug) => bug.id == bugId);
-      bugs[index].userId = userId;
+      const { id: bugId, userId } = action.payload;
+      const index = bugs.list.findIndex((bug) => bug.id == bugId);
+      bugs.list[index].userId = userId;
     },
     bugAdded: (bugs, action) => {
-      bugs.push({
-        id: ++lastId,
-        description: action.payload.description,
-        resolved: false,
-      });
+      bugs.list.push(action.payload);
     },
     bugResolved: (bugs, action) => {
-      const index = bugs.findIndex((bug) => bug.id === action.payload.id);
-      bugs[index].resolved = true;
+      const index = bugs.list.findIndex((bug) => bug.id === action.payload.id);
+      bugs.list[index].resolved = true;
     },
     bugRemoved: (bugs, action) => {
-      bugs = bugs.filter((bug) => bug !== action.payload.id);
+      bugs = bugs.list.filter((bug) => bug !== action.payload.id);
     },
   },
 });
 
-export const { bugAdded, bugResolved, bugRemoved, bugAssignedToUser } =
-  slice.actions;
+const {
+  bugAdded,
+  bugResolved,
+  bugRemoved,
+  bugAssignedToUser,
+  bugsReceived,
+  bugsRequested,
+  bugsRequestFailed,
+} = slice.actions;
 
 export default slice.reducer;
 
+// Action Creators
+const url = "/bugs";
+
+export const loadBugs = () => (dispatch, getState) => {
+  const { lastFetch } = getState().entities.bugs;
+  const diffInMinutes = moment().diff(moment(lastFetch), "minutes");
+  if (diffInMinutes < 10) return;
+  dispatch(
+    apiCallBegan({
+      url: url,
+      onStart: bugsRequested.type,
+      onError: bugsRequestFailed.type,
+      onSuccess: bugsReceived.type,
+    })
+  );
+};
+export const addBug = (bug) =>
+  apiCallBegan({
+    url: url,
+    method: "post",
+    data: bug,
+    onSuccess: bugAdded.type,
+  });
+
+export const resolveBug = (id) =>
+  apiCallBegan({
+    url: url + "/" + id,
+    method: "patch",
+    data: { resolved: true },
+    onSuccess: bugResolved.type,
+  });
+export const assignBugToUser = (bugId, userId) =>
+  apiCallBegan({
+    url: url + "/" + bugId,
+    method: "patch",
+    data: {
+      userId,
+    },
+    onSuccess: bugAssignedToUser.type,
+  });
 // Memoinzation
 export const getUnresolvedBugs = createSelector(
   (state) => state.entities.bugs,
   (state) => state.entities.projects,
-  (bugs, projects) => bugs.filter((bug) => !bug.resolved)
+  (bugs, projects) => bugs.list.filter((bug) => !bug.resolved)
 );
 
 export const getBugsByUser = (userId) =>
   createSelector(
     (state) => state.entities.bugs,
-    (bugs) => bugs.filter((bug) => bug.userId == userId)
+    (bugs) => bugs.list.filter((bug) => bug.userId == userId)
   );

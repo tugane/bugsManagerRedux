@@ -1,10 +1,11 @@
 import configureStore from "./store/configureStore";
+import { assignBugToUser, loadBugs, resolveBug } from "./store/bugs";
 
 const store = configureStore();
 
-// store.dispatch((dispatch, getState) => {
-//   dispatch({ type: "bugReceived", bugs: [1, 2, 3] });
-//   console.log(getState());
-// });
+// UI Layer
 
-store.dispatch({ type: "error", payload: { message: "error message" } });
+store.dispatch(loadBugs());
+setTimeout(() => {
+  store.dispatch(assignBugToUser(1));
+}, 2000);
